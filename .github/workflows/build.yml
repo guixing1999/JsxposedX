@@ -30,10 +30,6 @@ on:
           - release
           - both
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
 env:
   FLUTTER_VERSION: '3.41.9'
   JAVA_VERSION: '17'
