@@ -12,6 +12,18 @@ $DART_OUT_DIR = "lib/generated"
 $KOTLIN_SRC_ROOT = "android/app/src/main/kotlin"
 $BASE_PACKAGE = "com.jsxposed.x"
 
+# 大小写无关地查找已存在文件,保留开发者手工指定的大小写
+# (Windows FS 不敏感,Linux 敏感;不做这层兜底会在 Linux 旁边生成第二个重复文件)
+function Get-PreservedCaseName {
+    param($dir, $expectedName)
+    if (-not (Test-Path $dir -PathType Container)) { return $expectedName }
+    $existing = Get-ChildItem -Path $dir -File -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -ieq $expectedName } |
+        Select-Object -First 1
+    if ($existing) { return $existing.Name }
+    return $expectedName
+}
+
 function Run-Pigeon {
     param($file)
     
@@ -36,8 +48,10 @@ function Run-Pigeon {
         if ($_) { $className += "$([char]::ToUpper($_[0]))$($_.Substring(1))" }
     }
 
-    $kotlin_file = "$kotlin_out_dir/${className}Native.g.kt"
-    $impl_file = "$kotlin_out_dir/${className}NativeImpl.kt"
+    $kotlinFileName = Get-PreservedCaseName $kotlin_out_dir "${className}Native.g.kt"
+    $implFileName   = Get-PreservedCaseName $kotlin_out_dir "${className}NativeImpl.kt"
+    $kotlin_file = "$kotlin_out_dir/$kotlinFileName"
+    $impl_file = "$kotlin_out_dir/$implFileName"
 
     Write-Host "`n>>> [Generating] $fileName" -ForegroundColor Cyan
 
