@@ -1,4 +1,8 @@
 ﻿# 修复控制台和脚本编码
+param(
+    [switch]$Once
+)
+
 $OutputEncoding = [System.Text.Encoding]::UTF8
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 [Console]::InputEncoding = [System.Text.Encoding]::UTF8
@@ -62,6 +66,12 @@ class ${className}NativeImpl(val context: Context) : ${className}Native {
 }
 
 Get-ChildItem -Path $PIGEON_DIR -Filter *.dart -Recurse | ForEach-Object { Run-Pigeon $_.FullName }
+
+if ($Once) {
+    Write-Host "`n>>> [Once] Initial codegen complete, skipping watcher." -ForegroundColor Green
+    return
+}
+
 Write-Host "`n>>> [Watcher] Watching $PIGEON_DIR for changes..." -ForegroundColor Yellow
 $watcher = New-Object System.IO.FileSystemWatcher
 $watcher.Path = (Get-Item $PIGEON_DIR).FullName
