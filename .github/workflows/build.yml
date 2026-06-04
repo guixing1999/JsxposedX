@@ -1,0 +1,166 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - master
+    tags:
+      - 'V*'
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+    inputs:
+      flavor:
+        description: 'Xposed flavor to build'
+        required: true
+        default: 'both'
+        type: choice
+        options:
+          - api100
+          - api101
+          - both
+      build_type:
+        description: 'Build type'
+        required: true
+        default: 'release'
+        type: choice
+        options:
+          - debug
+          - release
+          - both
+
+env:
+  FLUTTER_VERSION: '3.41.9'
+  JAVA_VERSION: '17'
+
+jobs:
+  matrix:
+    name: Resolve build matrix
+    runs-on: ubuntu-latest
+    outputs:
+      include: ${{ steps.compute.outputs.include }}
+    steps:
+      - id: compute
+        shell: pwsh
+        run: |
+          $event   = '${{ github.event_name }}'
+          $ref     = '${{ github.ref }}'
+          $inFlav  = '${{ github.event.inputs.flavor }}'
+          $inType  = '${{ github.event.inputs.build_type }}'
+          $isTag   = $ref.StartsWith('refs/tags/V')
+
+          switch ($event) {
+            'workflow_dispatch' {
+              $flavors = if ($inFlav -eq 'both') { @('api100','api101') } else { @($inFlav) }
+              $types   = if ($inType -eq 'both') { @('debug','release') } else { @($inType) }
+            }
+            'pull_request' {
+              $flavors = @('api100','api101')
+              $types   = @('debug')
+            }
+            'push' {
+              if ($isTag) {
+                $flavors = @('api100','api101')
+                $types   = @('release')
+              } else {
+                $flavors = @('api100','api101')
+                $types   = @('debug')
+              }
+            }
+            default {
+              $flavors = @('api100')
+              $types   = @('debug')
+            }
+          }
+
+          $include = @()
+          foreach ($f in $flavors) {
+            foreach ($t in $types) {
+              $include += [ordered]@{ flavor = $f; build_type = $t }
+            }
+          }
+          $json = ConvertTo-Json -Compress -Depth 4 -InputObject @($include)
+          "include=$json" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "Resolved matrix: $json"
+
+  build:
+    name: Build ${{ matrix.flavor }} ${{ matrix.build_type }}
+    needs: matrix
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.matrix.outputs.include) }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Disable Aliyun maven mirrors (CI workspace only)
+        shell: pwsh
+        run: |
+          $files = @(
+            'android/build.gradle.kts',
+            'android/settings.gradle.kts'
+          )
+          foreach ($file in $files) {
+            if (-not (Test-Path $file)) { continue }
+            $content = Get-Content -Raw -Path $file
+            $cleaned = [regex]::Replace(
+              $content,
+              '(?ms)\s*maven\s*\{\s*url\s*=\s*uri\(\s*"https://maven\.aliyun\.com/[^"]*"\s*\)\s*\}',
+              ''
+            )
+            Set-Content -Path $file -Value $cleaned -NoNewline -Encoding UTF8
+            Write-Host "Stripped aliyun mirrors from $file"
+          }
+          $remaining = Select-String -Path $files -Pattern 'aliyun' -SimpleMatch
+          if ($remaining) {
+            Write-Error "Aliyun references still present after strip:"
+            $remaining | ForEach-Object { Write-Error "  $($_.Path):$($_.LineNumber)  $($_.Line.Trim())" }
+            exit 1
+          }
+          Write-Host "OK - no aliyun references remain."
+
+      - name: Setup JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: gradle
+
+      - name: Setup Flutter ${{ env.FLUTTER_VERSION }}
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: flutter pub get
+        shell: pwsh
+        run: flutter pub get
+
+      - name: Pigeon codegen (one-shot)
+        shell: pwsh
+        run: ./.buildScript/pigen_watch.ps1 -Once
+
+      - name: Build APK (${{ matrix.flavor }} / ${{ matrix.build_type }})
+        shell: pwsh
+        run: flutter build apk --flavor ${{ matrix.flavor }} --${{ matrix.build_type }}
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-${{ matrix.flavor }}-${{ matrix.build_type }}
+          path: build/app/outputs/flutter-apk/app-${{ matrix.flavor }}-${{ matrix.build_type }}.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Stop Gradle daemon (release cache locks before post-job save)
+        if: always()
+        shell: bash
+        run: |
+          if [ -f android/gradlew ]; then
+            (cd android && bash ./gradlew --stop) || true
+          fi
