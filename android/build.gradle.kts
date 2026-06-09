@@ -1,15 +1,6 @@
 allprojects {
     repositories {
-        // 国内镜像优先，官方仓库兜底，减少 Maven Central / Google Maven 慢下载
-        maven {
-            url = uri("https://maven.aliyun.com/repository/google")
-        }
-        maven {
-            url = uri("https://maven.aliyun.com/repository/central")
-        }
-        maven {
-            url = uri("https://maven.aliyun.com/repository/public")
-        }
+        // GitHub Actions 使用官方仓库（国外环境更稳定）
         google()
         mavenCentral()
     }

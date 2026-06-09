@@ -11,16 +11,7 @@ pluginManagement {
     includeBuild("$flutterSdkPath/packages/flutter_tools/gradle")
 
     repositories {
-        // 国内镜像优先，官方仓库兜底，减少 Gradle Sync 时的下载等待
-        maven {
-            url = uri("https://maven.aliyun.com/repository/gradle-plugin")
-        }
-        maven {
-            url = uri("https://maven.aliyun.com/repository/google")
-        }
-        maven {
-            url = uri("https://maven.aliyun.com/repository/central")
-        }
+        // GitHub Actions 使用官方仓库（国外环境更稳定）
         google()
         mavenCentral()
         gradlePluginPortal()
