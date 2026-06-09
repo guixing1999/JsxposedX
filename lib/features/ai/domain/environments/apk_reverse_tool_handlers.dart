@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:JsxposedX/features/ai/domain/contracts/ai_chat_tool_handler.dart';
 import 'package:JsxposedX/features/ai/domain/models/ai_context.dart';
 import 'package:JsxposedX/features/ai/domain/models/ai_tool_call.dart';
@@ -37,6 +39,7 @@ Iterable<AiChatToolHandler> buildApkReverseToolHandlers({
   yield _GetJniFunctionsToolHandler(context);
   yield _SearchSoStringsToolHandler(context);
   yield _GenerateSoHookToolHandler(context);
+  yield _ReadFridaLogsToolHandler(context);
 }
 
 abstract class _ApkReverseToolHandlerBase implements AiChatToolHandler {
@@ -507,6 +510,154 @@ class _GenerateSoHookToolHandler extends _ApkReverseToolHandlerBase {
       );
     } catch (error) {
       return '生成 Hook 代码失败: $error';
+    }
+  }
+}
+
+class _ReadFridaLogsToolHandler extends _ApkReverseToolHandlerBase {
+  const _ReadFridaLogsToolHandler(super.context);
+
+  @override
+  String get toolName => 'read_frida_logs';
+
+  /// 读取 Frida/JsxposedX 日志
+  /// 
+  /// 通过 ADB logcat 读取目标应用相关的 Hook 日志数据。
+  /// 支持按关键词过滤和限制行数。
+  @override
+  Future<String> handle(
+    AiToolCall call, {
+    AiToolProgressCallback? onProgress,
+  }) async {
+    final filter = call.getString('filter');
+    final lines = call.getInt('lines');
+    final maxLines = (lines > 0 && lines <= 500) ? lines : 200;
+
+    try {
+      // 读取 shell 脚本文件的日志内容
+      // 优先读取设备上的文件，文件不存在则回退到 logcat
+      final result = await _tryReadLogFile(filter, maxLines);
+      if (result != null) return result;
+
+      // 回退到 ADB logcat
+      return await _readLogcat(filter, maxLines);
+    } catch (error) {
+      return '读取 Hook 日志失败: $error\n\n提示：请确保设备已连接且 Frida 正在运行。\n也可以检查 /data/local/tmp/ccz_key.txt 等日志文件。';
+    }
+  }
+
+  /// 尝试从设备文件读取日志（如 /data/local/tmp/ccz_key.txt）
+  Future<String?> _tryReadLogFile(String? filter, int maxLines) async {
+    try {
+      final filePaths = [
+        '/data/local/tmp/ccz_key.txt',
+        '/data/local/tmp/frida_log.txt',
+        '/data/local/tmp/npk_ccz_keys_*.log',
+      ];
+
+      for (final path in filePaths) {
+        try {
+          final result = await Process.run(
+            'adb',
+            ['shell', 'cat', path],
+            runInShell: true,
+          );
+          if (result.exitCode == 0 && result.stdout.toString().isNotEmpty) {
+            var content = result.stdout.toString();
+            if (filter != null && filter.isNotEmpty) {
+              final lines = content.split('\n');
+              final filtered = lines
+                  .where((line) => line.toLowerCase().contains(filter.toLowerCase()))
+                  .toList();
+              content = filtered.take(maxLines).join('\n');
+            } else {
+              content = content.split('\n').take(maxLines).join('\n');
+            }
+            return content;
+          }
+        } catch (_) {
+          continue;
+        }
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// 从 ADB logcat 读取 Frida/JsxposedX 相关日志
+  Future<String> _readLogcat(String? filter, int maxLines) async {
+    // 构建 logcat 命令
+    // 过滤 Frida 和 JsxposedX 相关的 tag
+    final tags = ['Frida', 'JsxposedX', 'CCZ', 'KEY', '"JsxposedX-Frida"'];
+    final grepPattern = tags.map((t) => 'grep -i "$t"').join(' | ');
+
+    try {
+      // 先尝试获取 dump 日志
+      final result = await Process.run(
+        'adb',
+        ['shell', 'logcat', '-d', '-v', 'threadtime', '-t', '$maxLines'],
+        runInShell: true,
+      );
+
+      if (result.exitCode != 0) {
+        return '无法获取 logcat 日志。请确保设备已连接。\n错误: ${result.stderr}';
+      }
+
+      var output = result.stdout.toString();
+
+      // 过滤相关行
+      final allLines = output.split('\n');
+      final hookTags = ['Frida', 'JsxposedX', 'CCZ', 'KEY', 'frida',
+                        'Interceptor', 'hook', 'NPK', 'decrypt', 'encrypt',
+                        'set_ccz', 'AES', 'crypto'];
+
+      var filtered = allLines.where((line) {
+        final lower = line.toLowerCase();
+        return hookTags.any((tag) => lower.contains(tag.toLowerCase()));
+      }).toList();
+
+      // 按用户指定的关键词进一步过滤
+      if (filter != null && filter.isNotEmpty) {
+        final lowerFilter = filter.toLowerCase();
+        filtered = filtered
+            .where((line) => line.toLowerCase().contains(lowerFilter))
+            .toList();
+      }
+
+      filtered = filtered.take(maxLines).toList();
+
+      if (filtered.isEmpty) {
+        return '未找到匹配的 Hook 日志。\n\n'
+            '可能原因：\n'
+            '1. Frida 尚未注入到目标进程\n'
+            '2. Hook 脚本尚未触发相关函数\n'
+            '3. 日志已被系统清理\n\n'
+            '建议：\n'
+            '- 检查 Frida 是否正在运行\n'
+            '- 确认目标应用正在前台运行\n'
+            '- 尝试使用 "adb logcat | grep Frida" 查看实时日志';
+      }
+
+      final buffer = StringBuffer();
+      buffer.writeln('=== Frida/JsxposedX Hook 日志 (最近 ${filtered.length} 条) ===');
+      buffer.writeln('时间: ${DateTime.now().toIso8601String()}');
+      if (filter != null && filter.isNotEmpty) {
+        buffer.writeln('过滤: "$filter"');
+      }
+      buffer.writeln('');
+
+      for (final line in filtered) {
+        buffer.writeln(line);
+      }
+
+      buffer.writeln('');
+      buffer.writeln('--- 日志结束 ---');
+      buffer.writeln('提示: 使用 "adb logcat -c" 清空日志后重新注入可以看到最新数据');
+
+      return buffer.toString();
+    } catch (e) {
+      return '读取 logcat 失败: $e\n请确认 ADB 已正确配置。';
     }
   }
 }

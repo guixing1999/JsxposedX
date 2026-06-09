@@ -66,6 +66,9 @@ Native 层分析工具：
 - search_so_strings(soPath, keyword) — 搜索 SO 中的字符串（密钥、URL 等）
 - generate_so_hook(soPath, symbolName, address) — 生成 Frida Hook 代码
 
+运行时调试工具：
+- read_frida_logs(filter?, lines?) — 读取 Frida/JsxposedX Hook 运行时日志。可从设备 logcat 或日志文件中读取 Hook 捕获的密钥、参数、返回值等动态数据。默认返回最近 200 行，支持关键词过滤
+
 【典型工作流程】
 
 示例 1 - 分析 VIP 检测：
@@ -135,6 +138,9 @@ Native Layer Analysis:
 - get_jni_functions(soPath) — Get JNI function list in SO
 - search_so_strings(soPath, keyword) — Search strings in SO (keys, URLs, etc.)
 - generate_so_hook(soPath, symbolName, address) — Generate Frida Hook code
+
+Runtime Debugging Tools:
+- read_frida_logs(filter?, lines?) — Read Frida/JsxposedX Hook runtime logs from device logcat or log files. Captures keys, parameters, return values, and other dynamic data. Default returns last 200 lines, supports keyword filtering
 
 [Typical Workflows]
 

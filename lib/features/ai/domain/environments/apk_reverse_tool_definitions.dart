@@ -123,6 +123,24 @@ class ApkReverseToolDefinitions {
         .build(),
   );
 
+  static final readFridaLogs = AiToolDefinition(
+    name: 'read_frida_logs',
+    description:
+        '读取 Frida/JsxposedX Hook 的运行时日志数据。可以获取 hook 捕获的密钥、参数、返回值、调用堆栈等实时数据。用于分析 Hook 是否生效，以及获取动态调试的输出结果。默认返回最近 200 行日志',
+    parameters: (ToolParametersBuilder()
+          ..addString(
+            'filter',
+            '日志过滤关键词，如 "CCZ"、"KEY"、"decrypt"、"password" 等。不传则返回所有 Hook 相关日志',
+            required: false,
+          )
+          ..addInt(
+            'lines',
+            '返回的行数，默认 200，最大 500',
+            required: false,
+          ))
+        .build(),
+  );
+
   static final generateSoHook = AiToolDefinition(
     name: 'generate_so_hook',
     description: '为指定的 SO 符号生成 Frida Hook 代码模板，包括参数解析、返回值修改等',
@@ -154,5 +172,6 @@ class ApkReverseToolDefinitions {
     getJniFunctions,
     searchSoStrings,
     generateSoHook,
+    readFridaLogs,
   ];
 }

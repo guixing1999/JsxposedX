@@ -7,7 +7,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 version: 6.0.1+601
 
 environment:
-  sdk: ^3.9.2
+  sdk: ">=3.7.2 <4.0.0"
 
 
 dependencies:
@@ -58,7 +58,7 @@ dependencies:
   flutter_quill_extensions: ^11.0.0
   flutter_quill_delta_from_html: ^1.5.3
   flutter_html: ^3.0.0
-  markdown: ^7.3.1
+  markdown: ^7.2.0
   marquee: ^2.3.0
   external_app_launcher: ^4.0.3
   flutter_floating: ^2.0.2
