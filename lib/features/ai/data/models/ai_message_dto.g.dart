@@ -21,7 +21,8 @@ Map<String, dynamic> _$AiMessageDtoToJson(_AiMessageDto instance) =>
     <String, dynamic>{
       'role': instance.role,
       'content': instance.content,
-      'reasoning_content': ?instance.reasoningContent,
-      'tool_calls': ?instance.toolCalls,
-      'tool_call_id': ?instance.toolCallId,
+      if (instance.reasoningContent != null)
+        'reasoning_content': instance.reasoningContent,
+      if (instance.toolCalls != null) 'tool_calls': instance.toolCalls,
+      if (instance.toolCallId != null) 'tool_call_id': instance.toolCallId,
     };
