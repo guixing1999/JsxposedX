@@ -133,7 +133,7 @@ class ApkReverseToolDefinitions {
             '日志过滤关键词，如 "CCZ"、"KEY"、"decrypt"、"password" 等。不传则返回所有 Hook 相关日志',
             required: false,
           )
-          ..addInt(
+          ..addInteger(
             'lines',
             '返回的行数，默认 200，最大 500',
             required: false,
